@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,9 +35,31 @@ enum class TipoTrueque {
     OBJETO, HABILIDAD
 }
 
+private enum class RutaPantalla {
+    PRINCIPAL,
+    PERFIL
+}
+
+@Composable
+fun AppTrueque() {
+    var rutaActual by rememberSaveable { mutableStateOf(RutaPantalla.PRINCIPAL) }
+
+    when (rutaActual) {
+        RutaPantalla.PRINCIPAL -> PantallaPrincipal(
+            onPerfilClick = { rutaActual = RutaPantalla.PERFIL }
+        )
+
+        RutaPantalla.PERFIL -> PantallaPerfil(
+            onVolver = { rutaActual = RutaPantalla.PRINCIPAL }
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PantallaPrincipal() {
+fun PantallaPrincipal(
+    onPerfilClick: () -> Unit
+) {
     var selectedTab by remember { mutableStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
 
@@ -69,7 +92,7 @@ fun PantallaPrincipal() {
                             Icon(Icons.Default.Notifications, "Notificaciones")
                         }
                     }
-                    IconButton(onClick = { /* Perfil */ }) {
+                    IconButton(onClick = onPerfilClick) {
                         Icon(Icons.Default.Person, "Perfil")
                     }
                 },
@@ -140,6 +163,299 @@ fun PantallaPrincipal() {
 
                 items(itemsToShow) { item ->
                     TruequeCard(item)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PantallaPerfil(
+    onVolver: () -> Unit
+) {
+    val nombreUsuario = "Ana García"
+    val usuario = "@ana.garcia"
+    val ubicacion = "Madrid"
+    val valoracionMedia = 4.7f
+    val truequesRealizados = 18
+    val truequesActivos = 3
+    val truequesFavoritos = 12
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "Perfil",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onVolver) {
+                        Icon(Icons.Default.ArrowBack, "Volver")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(72.dp),
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.Person,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(40.dp),
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = nombreUsuario,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = usuario,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.LocationOn,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = ubicacion,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Star,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                            tint = Color(0xFFFFB300)
+                                        )
+                                        Text(
+                                            text = valoracionMedia.toString(),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+
+                            OutlinedButton(onClick = { }) {
+                                Text("Editar")
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Card(
+                                modifier = Modifier.weight(1f),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                ),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = truequesActivos.toString(),
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                    Text(
+                                        text = "Activos",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+
+                            Card(
+                                modifier = Modifier.weight(1f),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                ),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = truequesRealizados.toString(),
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                    Text(
+                                        text = "Realizados",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                }
+                            }
+
+                            Card(
+                                modifier = Modifier.weight(1f),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                                ),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = truequesFavoritos.toString(),
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                                    )
+                                    Text(
+                                        text = "Favoritos",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        ListItem(
+                            headlineContent = { Text("Mis trueques") },
+                            supportingContent = { Text("Gestiona tus publicaciones activas") },
+                            leadingContent = { Icon(Icons.Default.List, contentDescription = null) },
+                            trailingContent = { Icon(Icons.Default.KeyboardArrowRight, contentDescription = null) },
+                            modifier = Modifier.clickable { }
+                        )
+                        Divider()
+                        ListItem(
+                            headlineContent = { Text("Historial") },
+                            supportingContent = { Text("Trueques finalizados y valoraciones") },
+                            leadingContent = { Icon(Icons.Default.History, contentDescription = null) },
+                            trailingContent = { Icon(Icons.Default.KeyboardArrowRight, contentDescription = null) },
+                            modifier = Modifier.clickable { }
+                        )
+                        Divider()
+                        ListItem(
+                            headlineContent = { Text("Direcciones") },
+                            supportingContent = { Text("Entrega y puntos de encuentro") },
+                            leadingContent = { Icon(Icons.Default.Place, contentDescription = null) },
+                            trailingContent = { Icon(Icons.Default.KeyboardArrowRight, contentDescription = null) },
+                            modifier = Modifier.clickable { }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        ListItem(
+                            headlineContent = { Text("Privacidad") },
+                            supportingContent = { Text("Controla tu visibilidad") },
+                            leadingContent = { Icon(Icons.Default.Lock, contentDescription = null) },
+                            trailingContent = { Icon(Icons.Default.KeyboardArrowRight, contentDescription = null) },
+                            modifier = Modifier.clickable { }
+                        )
+                        Divider()
+                        ListItem(
+                            headlineContent = { Text("Notificaciones") },
+                            supportingContent = { Text("Configura avisos y alertas") },
+                            leadingContent = { Icon(Icons.Default.Notifications, contentDescription = null) },
+                            trailingContent = { Icon(Icons.Default.KeyboardArrowRight, contentDescription = null) },
+                            modifier = Modifier.clickable { }
+                        )
+                        Divider()
+                        ListItem(
+                            headlineContent = { Text("Ayuda") },
+                            supportingContent = { Text("Centro de ayuda y soporte") },
+                            leadingContent = { Icon(Icons.Default.Help, contentDescription = null) },
+                            trailingContent = { Icon(Icons.Default.KeyboardArrowRight, contentDescription = null) },
+                            modifier = Modifier.clickable { }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Button(
+                    onClick = { },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) {
+                    Icon(Icons.Default.Logout, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Cerrar sesión")
                 }
             }
         }
