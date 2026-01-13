@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import java.util.UUID
 
 // Modelo de datos para los items de trueque
 data class TruequeItem(
@@ -37,20 +38,42 @@ enum class TipoTrueque {
 
 private enum class RutaPantalla {
     PRINCIPAL,
-    PERFIL
+    PERFIL,
+    AGREGAR_TRUEQUE
 }
 
 @Composable
 fun AppTrueque() {
     var rutaActual by rememberSaveable { mutableStateOf(RutaPantalla.PRINCIPAL) }
+    val misTrueques = remember { mutableStateListOf<TruequeItem>() }
 
     when (rutaActual) {
         RutaPantalla.PRINCIPAL -> PantallaPrincipal(
-            onPerfilClick = { rutaActual = RutaPantalla.PERFIL }
+            onPerfilClick = { rutaActual = RutaPantalla.PERFIL },
+            onNuevoTruequeClick = { rutaActual = RutaPantalla.AGREGAR_TRUEQUE }
         )
 
         RutaPantalla.PERFIL -> PantallaPerfil(
-            onVolver = { rutaActual = RutaPantalla.PRINCIPAL }
+            onVolver = { rutaActual = RutaPantalla.PRINCIPAL },
+            misTrueques = misTrueques,
+            onAgregarTrueque = { rutaActual = RutaPantalla.AGREGAR_TRUEQUE }
+        )
+
+        RutaPantalla.AGREGAR_TRUEQUE -> PantallaAgregarTrueque(
+            onVolver = { rutaActual = RutaPantalla.PERFIL },
+            onGuardar = { titulo, descripcion, tipo ->
+                misTrueques.add(
+                    TruequeItem(
+                        id = UUID.randomUUID().toString(),
+                        titulo = titulo,
+                        descripcion = descripcion,
+                        tipo = tipo,
+                        usuario = "Ana García",
+                        valoracion = 0f
+                    )
+                )
+                rutaActual = RutaPantalla.PERFIL
+            }
         )
     }
 }
@@ -59,6 +82,18 @@ fun AppTrueque() {
 @Composable
 fun PantallaPrincipal(
     onPerfilClick: () -> Unit
+) {
+    PantallaPrincipal(
+        onPerfilClick = onPerfilClick,
+        onNuevoTruequeClick = { }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PantallaPrincipal(
+    onPerfilClick: () -> Unit,
+    onNuevoTruequeClick: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
@@ -103,7 +138,7 @@ fun PantallaPrincipal(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = { /* Crear nuevo trueque */ },
+                onClick = onNuevoTruequeClick,
                 icon = { Icon(Icons.Default.Add, "Añadir") },
                 text = { Text("Nuevo Trueque") },
                 containerColor = MaterialTheme.colorScheme.primary
@@ -171,15 +206,120 @@ fun PantallaPrincipal(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+fun PantallaAgregarTrueque(
+    onVolver: () -> Unit,
+    onGuardar: (String, String, TipoTrueque) -> Unit
+) {
+    var titulo by rememberSaveable { mutableStateOf("") }
+    var descripcion by rememberSaveable { mutableStateOf("") }
+    var tipo by rememberSaveable { mutableStateOf(TipoTrueque.OBJETO) }
+    var mostrarError by rememberSaveable { mutableStateOf(false) }
+
+    val formularioValido = titulo.isNotBlank() && descripcion.isNotBlank()
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(text = "Nuevo trueque", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onVolver) {
+                        Icon(Icons.Default.ArrowBack, "Volver")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedTextField(
+                value = titulo,
+                onValueChange = {
+                    titulo = it
+                    if (mostrarError) mostrarError = false
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Título") },
+                singleLine = true
+            )
+
+            OutlinedTextField(
+                value = descripcion,
+                onValueChange = {
+                    descripcion = it
+                    if (mostrarError) mostrarError = false
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 120.dp),
+                label = { Text("Descripción") }
+            )
+
+            Text(
+                text = "Tipo de trueque",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                FilterChip(
+                    selected = tipo == TipoTrueque.OBJETO,
+                    onClick = { tipo = TipoTrueque.OBJETO },
+                    label = { Text("Objeto") }
+                )
+                FilterChip(
+                    selected = tipo == TipoTrueque.HABILIDAD,
+                    onClick = { tipo = TipoTrueque.HABILIDAD },
+                    label = { Text("Habilidad") }
+                )
+            }
+
+            if (mostrarError) {
+                Text(
+                    text = "Completa el título y la descripción.",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Button(
+                onClick = {
+                    if (!formularioValido) {
+                        mostrarError = true
+                        return@Button
+                    }
+                    onGuardar(titulo.trim(), descripcion.trim(), tipo)
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Publicar trueque")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun PantallaPerfil(
-    onVolver: () -> Unit
+    onVolver: () -> Unit,
+    misTrueques: List<TruequeItem>,
+    onAgregarTrueque: () -> Unit
 ) {
     val nombreUsuario = "Ana García"
     val usuario = "@ana.garcia"
     val ubicacion = "Madrid"
     val valoracionMedia = 4.7f
     val truequesRealizados = 18
-    val truequesActivos = 3
+    val truequesActivos = misTrueques.size
     val truequesFavoritos = 12
 
     Scaffold(
@@ -295,6 +435,15 @@ fun PantallaPerfil(
                             }
                         }
 
+                        Button(
+                            onClick = onAgregarTrueque,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Añadir trueque")
+                        }
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -375,6 +524,45 @@ fun PantallaPerfil(
                             }
                         }
                     }
+                }
+            }
+
+            item {
+                Text(
+                    text = "Mis trueques",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            if (misTrueques.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "Aún no has publicado trueques.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Pulsa en \"Añadir trueque\" para crear el primero.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            } else {
+                items(misTrueques) { itemTrueque ->
+                    TruequeCard(itemTrueque)
                 }
             }
 
