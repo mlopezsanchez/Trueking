@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 // Modelo de datos para los items de trueque
@@ -45,22 +46,29 @@ private enum class RutaPantalla {
 @Composable
 fun AppTrueque() {
     var rutaActual by rememberSaveable { mutableStateOf(RutaPantalla.PRINCIPAL) }
+    var rutaVolverAgregar by rememberSaveable { mutableStateOf(RutaPantalla.PRINCIPAL) }
     val misTrueques = remember { mutableStateListOf<TruequeItem>() }
 
     when (rutaActual) {
         RutaPantalla.PRINCIPAL -> PantallaPrincipal(
             onPerfilClick = { rutaActual = RutaPantalla.PERFIL },
-            onNuevoTruequeClick = { rutaActual = RutaPantalla.AGREGAR_TRUEQUE }
+            onNuevoTruequeClick = {
+                rutaVolverAgregar = RutaPantalla.PRINCIPAL
+                rutaActual = RutaPantalla.AGREGAR_TRUEQUE
+            }
         )
 
         RutaPantalla.PERFIL -> PantallaPerfil(
             onVolver = { rutaActual = RutaPantalla.PRINCIPAL },
             misTrueques = misTrueques,
-            onAgregarTrueque = { rutaActual = RutaPantalla.AGREGAR_TRUEQUE }
+            onAgregarTrueque = {
+                rutaVolverAgregar = RutaPantalla.PERFIL
+                rutaActual = RutaPantalla.AGREGAR_TRUEQUE
+            }
         )
 
         RutaPantalla.AGREGAR_TRUEQUE -> PantallaAgregarTrueque(
-            onVolver = { rutaActual = RutaPantalla.PERFIL },
+            onVolver = { rutaActual = rutaVolverAgregar },
             onGuardar = { titulo, descripcion, tipo ->
                 misTrueques.add(
                     TruequeItem(
@@ -81,22 +89,17 @@ fun AppTrueque() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PantallaPrincipal(
-    onPerfilClick: () -> Unit
-) {
-    PantallaPrincipal(
-        onPerfilClick = onPerfilClick,
-        onNuevoTruequeClick = { }
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun PantallaPrincipal(
     onPerfilClick: () -> Unit,
     onNuevoTruequeClick: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
+    var categoriaSeleccionada by rememberSaveable { mutableStateOf<String?>(null) }
+    var itemDetalle by remember { mutableStateOf<TruequeItem?>(null) }
+    val favoritos = remember { mutableStateListOf<String>() }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val alcance = rememberCoroutineScope()
+    var notificacionesPendientes by rememberSaveable { mutableStateOf(3) }
 
     // Datos de ejemplo
     val itemsObjetos = listOf(
@@ -112,6 +115,7 @@ fun PantallaPrincipal(
     )
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -122,8 +126,29 @@ fun PantallaPrincipal(
                     )
                 },
                 actions = {
-                    IconButton(onClick = { /* Notificaciones */ }) {
-                        Badge {
+                    IconButton(
+                        onClick = {
+                            alcance.launch {
+                                if (notificacionesPendientes <= 0) {
+                                    snackbarHostState.showSnackbar("No tienes notificaciones nuevas.")
+                                } else {
+                                    snackbarHostState.showSnackbar(
+                                        "Tienes $notificacionesPendientes notificaciones pendientes (demo)."
+                                    )
+                                    notificacionesPendientes = 0
+                                }
+                            }
+                        }
+                    ) {
+                        BadgedBox(
+                            badge = {
+                                if (notificacionesPendientes > 0) {
+                                    Badge {
+                                        Text(notificacionesPendientes.toString())
+                                    }
+                                }
+                            }
+                        ) {
                             Icon(Icons.Default.Notifications, "Notificaciones")
                         }
                     }
@@ -182,7 +207,10 @@ fun PantallaPrincipal(
             }
 
             // Categorías destacadas
-            CategoriesSection()
+            CategoriesSection(
+                categoriaSeleccionada = categoriaSeleccionada,
+                onCategoriaSeleccionadaChange = { nueva -> categoriaSeleccionada = nueva }
+            )
 
             // Lista de items
             LazyColumn(
@@ -196,11 +224,107 @@ fun PantallaPrincipal(
                     else -> itemsObjetos + itemsHabilidades
                 }
 
-                items(itemsToShow) { item ->
-                    TruequeCard(item)
+                val itemsFiltrados = itemsToShow
+                    .asSequence()
+                    .filter { item ->
+                        if (searchQuery.isBlank()) {
+                            true
+                        } else {
+                            val q = searchQuery.trim()
+                            item.titulo.contains(q, ignoreCase = true) ||
+                                item.descripcion.contains(q, ignoreCase = true) ||
+                                item.usuario.contains(q, ignoreCase = true)
+                        }
+                    }
+                    .filter { item ->
+                        when (categoriaSeleccionada) {
+                            null -> true
+                            "Electrónica" -> item.titulo.contains("ordenador", ignoreCase = true) ||
+                                item.descripcion.contains("hardware", ignoreCase = true) ||
+                                item.descripcion.contains("software", ignoreCase = true)
+                            "Libros" -> item.titulo.contains("libro", ignoreCase = true) ||
+                                item.descripcion.contains("Clean Code", ignoreCase = true)
+                            "Deportes" -> item.titulo.contains("bicicleta", ignoreCase = true)
+                            "Música" -> item.titulo.contains("guitarra", ignoreCase = true) ||
+                                item.descripcion.contains("rock", ignoreCase = true) ||
+                                item.descripcion.contains("pop", ignoreCase = true)
+                            "Idiomas" -> item.titulo.contains("inglés", ignoreCase = true) ||
+                                item.descripcion.contains("inglés", ignoreCase = true)
+                            else -> true
+                        }
+                    }
+                    .toList()
+
+                items(itemsFiltrados) { item ->
+                    TruequeCard(
+                        item = item,
+                        onClick = { itemDetalle = item },
+                        onTipoClick = {
+                            selectedTab = if (item.tipo == TipoTrueque.OBJETO) 1 else 2
+                        }
+                    )
                 }
             }
         }
+    }
+
+    itemDetalle?.let { item ->
+        val esFavorito = favoritos.contains(item.id)
+        AlertDialog(
+            onDismissRequest = { itemDetalle = null },
+            title = { Text(item.titulo, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(item.descripcion)
+                    Text(
+                        text = "Usuario: ${item.usuario}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Valoración: ${item.valoracion}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            if (esFavorito) {
+                                favoritos.remove(item.id)
+                            } else {
+                                favoritos.add(item.id)
+                            }
+                            alcance.launch {
+                                snackbarHostState.showSnackbar(
+                                    if (esFavorito) "Eliminado de favoritos." else "Añadido a favoritos."
+                                )
+                            }
+                        }
+                    ) {
+                        Text(if (esFavorito) "Quitar favorito" else "Favorito")
+                    }
+
+                    Button(
+                        onClick = {
+                            itemDetalle = null
+                            alcance.launch {
+                                snackbarHostState.showSnackbar(
+                                    "Solicitud enviada a ${item.usuario} (demo)."
+                                )
+                            }
+                        }
+                    ) {
+                        Text("Solicitar")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { itemDetalle = null }) {
+                    Text("Cerrar")
+                }
+            }
+        )
     }
 }
 
@@ -325,12 +449,7 @@ fun PantallaPerfil(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        text = "Perfil",
-                        fontWeight = FontWeight.Bold
-                    )
-                },
+                title = { Text(text = "Perfil", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onVolver) {
                         Icon(Icons.Default.ArrowBack, "Volver")
@@ -562,7 +681,11 @@ fun PantallaPerfil(
                 }
             } else {
                 items(misTrueques) { itemTrueque ->
-                    TruequeCard(itemTrueque)
+                    TruequeCard(
+                        item = itemTrueque,
+                        onClick = { },
+                        onTipoClick = { }
+                    )
                 }
             }
 
@@ -675,7 +798,10 @@ fun SearchBar(
 }
 
 @Composable
-fun CategoriesSection() {
+fun CategoriesSection(
+    categoriaSeleccionada: String?,
+    onCategoriaSeleccionadaChange: (String?) -> Unit
+) {
     val categories = listOf(
         "Electrónica" to Icons.Default.Phone,
         "Libros" to Icons.Default.Menu,
@@ -695,45 +821,52 @@ fun CategoriesSection() {
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(categories) { (name, icon) ->
-                CategoryChip(name, icon)
+                CategoryChip(
+                    name = name,
+                    icon = icon,
+                    seleccionada = categoriaSeleccionada == name,
+                    onClick = {
+                        onCategoriaSeleccionadaChange(
+                            if (categoriaSeleccionada == name) null else name
+                        )
+                    }
+                )
             }
         }
     }
 }
 
 @Composable
-fun CategoryChip(name: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.primaryContainer,
-        modifier = Modifier.clickable { /* Filtrar por categoría */ }
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+fun CategoryChip(
+    name: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    seleccionada: Boolean,
+    onClick: () -> Unit
+) {
+    FilterChip(
+        selected = seleccionada,
+        onClick = onClick,
+        label = { Text(name) },
+        leadingIcon = {
             Icon(
                 icon,
                 contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            Text(
-                name,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                modifier = Modifier.size(18.dp)
             )
         }
-    }
+    )
 }
 
 @Composable
-fun TruequeCard(item: TruequeItem) {
+fun TruequeCard(
+    item: TruequeItem,
+    onClick: () -> Unit,
+    onTipoClick: () -> Unit
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { /* Ver detalles */ },
+            .clickable(onClick = onClick),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         shape = RoundedCornerShape(16.dp)
     ) {
@@ -784,7 +917,7 @@ fun TruequeCard(item: TruequeItem) {
                         fontWeight = FontWeight.Bold
                     )
                     AssistChip(
-                        onClick = { },
+                        onClick = onTipoClick,
                         label = {
                             Text(
                                 if (item.tipo == TipoTrueque.OBJETO) "Objeto" else "Habilidad",
