@@ -19,6 +19,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import android.content.Context
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -40,14 +44,29 @@ enum class TipoTrueque {
 private enum class RutaPantalla {
     PRINCIPAL,
     PERFIL,
-    AGREGAR_TRUEQUE
+    AGREGAR_TRUEQUE,
+    LOGIN,
+    REGISTRO
 }
 
 @Composable
 fun AppTrueque() {
-    var rutaActual by rememberSaveable { mutableStateOf(RutaPantalla.PRINCIPAL) }
+    var rutaActual by rememberSaveable { mutableStateOf(RutaPantalla.LOGIN) }
     var rutaVolverAgregar by rememberSaveable { mutableStateOf(RutaPantalla.PRINCIPAL) }
     val misTrueques = remember { mutableStateListOf<TruequeItem>() }
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE) }
+    val auth = remember { FirebaseAuth.getInstance() }
+
+    LaunchedEffect(Unit) {
+        val rememberMe = prefs.getBoolean("remember_me", false)
+        val user = auth.currentUser
+        rutaActual = if (user != null && rememberMe) {
+            RutaPantalla.PRINCIPAL
+        } else {
+            RutaPantalla.LOGIN
+        }
+    }
 
     when (rutaActual) {
         RutaPantalla.PRINCIPAL -> PantallaPrincipal(
@@ -64,6 +83,11 @@ fun AppTrueque() {
             onAgregarTrueque = {
                 rutaVolverAgregar = RutaPantalla.PERFIL
                 rutaActual = RutaPantalla.AGREGAR_TRUEQUE
+            },
+            onCerrarSesion = {
+                prefs.edit().putBoolean("remember_me", false).apply()
+                FirebaseAuth.getInstance().signOut()
+                rutaActual = RutaPantalla.LOGIN
             }
         )
 
@@ -82,6 +106,20 @@ fun AppTrueque() {
                 )
                 rutaActual = RutaPantalla.PERFIL
             }
+        )
+        RutaPantalla.LOGIN -> PantallaLogin(
+            onLoginExitoso = { rememberMe ->
+                prefs.edit().putBoolean("remember_me", rememberMe).apply()
+                rutaActual = RutaPantalla.PRINCIPAL
+            },
+            onIrARegistro = { rutaActual = RutaPantalla.REGISTRO }
+        )
+        RutaPantalla.REGISTRO -> PantallaRegistro(
+            onRegistroExitoso = { rememberMe ->
+                prefs.edit().putBoolean("remember_me", rememberMe).apply()
+                rutaActual = RutaPantalla.PRINCIPAL
+            },
+            onVolverLogin = { rutaActual = RutaPantalla.LOGIN }
         )
     }
 }
@@ -436,15 +474,31 @@ fun PantallaAgregarTrueque(
 fun PantallaPerfil(
     onVolver: () -> Unit,
     misTrueques: List<TruequeItem>,
-    onAgregarTrueque: () -> Unit
+    onAgregarTrueque: () -> Unit,
+    onCerrarSesion: () -> Unit
 ) {
-    val nombreUsuario = "Ana García"
-    val usuario = "@ana.garcia"
+    var nombreUsuario by remember { mutableStateOf("") }
+    var usuario by remember { mutableStateOf("") }
     val ubicacion = "Madrid"
     val valoracionMedia = 4.7f
     val truequesRealizados = 18
     val truequesActivos = misTrueques.size
     val truequesFavoritos = 12
+
+    val auth = remember { FirebaseAuth.getInstance() }
+    val db = remember { FirebaseFirestore.getInstance() }
+
+    LaunchedEffect(Unit) {
+        val uid = auth.currentUser?.uid
+        if (uid != null) {
+            db.collection("usuarios").document(uid).get()
+                .addOnSuccessListener { snap ->
+                    nombreUsuario = snap.getString("nombre") ?: ""
+                    val usuarioStr = snap.getString("usuario") ?: ""
+                    usuario = if (usuarioStr.startsWith("@")) usuarioStr else if (usuarioStr.isNotBlank()) "@$usuarioStr" else ""
+                }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -757,7 +811,7 @@ fun PantallaPerfil(
 
             item {
                 Button(
-                    onClick = { },
+                    onClick = onCerrarSesion,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error,
@@ -768,6 +822,204 @@ fun PantallaPerfil(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Cerrar sesión")
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PantallaLogin(
+    onLoginExitoso: (rememberMe: Boolean) -> Unit,
+    onIrARegistro: () -> Unit
+) {
+    val auth = remember { FirebaseAuth.getInstance() }
+    var correo by rememberSaveable { mutableStateOf("") }
+    var contrasena by rememberSaveable { mutableStateOf("") }
+    var recordar by rememberSaveable { mutableStateOf(true) }
+    var cargando by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val alcance = rememberCoroutineScope()
+
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("Iniciar sesión", fontWeight = FontWeight.Bold) })
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedTextField(
+                value = correo,
+                onValueChange = { correo = it },
+                label = { Text("Correo electrónico") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = contrasena,
+                onValueChange = { contrasena = it },
+                label = { Text("Contraseña") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = recordar, onCheckedChange = { recordar = it })
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Recuérdame")
+            }
+            Button(
+                onClick = {
+                    if (correo.isBlank() || contrasena.isBlank()) {
+                        alcance.launch { snackbarHostState.showSnackbar("Introduce correo y contraseña.") }
+                        return@Button
+                    }
+                    cargando = true
+                    auth.signInWithEmailAndPassword(correo.trim(), contrasena)
+                        .addOnCompleteListener { task ->
+                            cargando = false
+                            if (task.isSuccessful) {
+                                onLoginExitoso(recordar)
+                            } else {
+                                alcance.launch { snackbarHostState.showSnackbar(task.exception?.localizedMessage ?: "Error de autenticación") }
+                            }
+                        }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !cargando
+            ) {
+                if (cargando) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text("Entrar")
+            }
+            TextButton(onClick = onIrARegistro, modifier = Modifier.fillMaxWidth()) {
+                Text("¿No tienes cuenta? Regístrate")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PantallaRegistro(
+    onRegistroExitoso: (rememberMe: Boolean) -> Unit,
+    onVolverLogin: () -> Unit
+) {
+    val auth = remember { FirebaseAuth.getInstance() }
+    val db = remember { FirebaseFirestore.getInstance() }
+    var nombre by rememberSaveable { mutableStateOf("") }
+    var usuario by rememberSaveable { mutableStateOf("") }
+    var correo by rememberSaveable { mutableStateOf("") }
+    var contrasena by rememberSaveable { mutableStateOf("") }
+    var recordar by rememberSaveable { mutableStateOf(true) }
+    var cargando by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val alcance = rememberCoroutineScope()
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Crear cuenta", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onVolverLogin) { Icon(Icons.Default.ArrowBack, contentDescription = null) }
+                }
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedTextField(
+                value = nombre,
+                onValueChange = { nombre = it },
+                label = { Text("Nombre") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = usuario,
+                onValueChange = { usuario = it },
+                label = { Text("Usuario") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = correo,
+                onValueChange = { correo = it },
+                label = { Text("Correo electrónico") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = contrasena,
+                onValueChange = { contrasena = it },
+                label = { Text("Contraseña") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = recordar, onCheckedChange = { recordar = it })
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Recuérdame")
+            }
+            Button(
+                onClick = {
+                    if (nombre.isBlank() || usuario.isBlank() || correo.isBlank() || contrasena.isBlank()) {
+                        alcance.launch { snackbarHostState.showSnackbar("Completa todos los campos.") }
+                        return@Button
+                    }
+                    cargando = true
+                    auth.createUserWithEmailAndPassword(correo.trim(), contrasena)
+                        .addOnCompleteListener { task ->
+                            if (task.isSuccessful) {
+                                val uid = task.result?.user?.uid
+                                if (uid != null) {
+                                    val datos = mapOf(
+                                        "nombre" to nombre.trim(),
+                                        "usuario" to usuario.trim(),
+                                        "correo" to correo.trim()
+                                    )
+                                    db.collection("usuarios").document(uid).set(datos)
+                                        .addOnSuccessListener {
+                                            cargando = false
+                                            onRegistroExitoso(recordar)
+                                        }
+                                        .addOnFailureListener { e ->
+                                            cargando = false
+                                            alcance.launch { snackbarHostState.showSnackbar(e.localizedMessage ?: "Error guardando perfil") }
+                                        }
+                                } else {
+                                    cargando = false
+                                    alcance.launch { snackbarHostState.showSnackbar("Error creando usuario") }
+                                }
+                            } else {
+                                cargando = false
+                                alcance.launch { snackbarHostState.showSnackbar(task.exception?.localizedMessage ?: "Error de registro") }
+                            }
+                        }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !cargando
+            ) {
+                if (cargando) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text("Crear cuenta")
             }
         }
     }
