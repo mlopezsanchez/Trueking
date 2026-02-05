@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1076821782231",
+    "project_id": "trueking-e4a4b",
+    "storage_bucket": "trueking-e4a4b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1076821782231:android:046bfc5d84fdc8f45d4a92",
+        "android_client_info": {
+          "package_name": "com.example.trueking"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDpe8UUIa-CCRDsnXRZw9r2g_7yrAGB8ig"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
